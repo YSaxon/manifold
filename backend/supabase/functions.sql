@@ -776,9 +776,10 @@ user_embedding as (
   select interest_embedding
   from user_embeddings
   where user_id = uid
-)
+),
 --select all the ads that haven't been redeemed, by closest to your embedding
-select (id, market_id, funds, cost_per_view)
+unredeemed_market_ads as (
+select id, market_id, funds, cost_per_view
 from market_ads
 where 
   NOT EXISTS (
@@ -793,8 +794,10 @@ order by embedding <=> (
     from user_embedding
   )
 limit 50
--- join
--- contracts on contracts.id = market_ads.market_id
+),
+select *
+ from unredeemed_market_ads 
+join contracts on contracts.id = market_ads.market_id
 $$;
 
 create
@@ -835,54 +838,4 @@ select nullif(
     current_setting('request.jwt.claims', true)::json->>'sub',
     ''
   )::text;
-$$;
-
-CREATE OR REPLACE FUNCTION get_reply_chain_comments_matching_contracts(contract_ids TEXT[], past_time_ms BIGINT)
-    RETURNS TABLE (
-                      id text,
-                      contract_id text,
-                      data JSONB
-                  ) AS $$
-BEGIN
-    RETURN QUERY
-        WITH matching_comments AS (
-            SELECT
-                (c1.data ->> 'id') AS id,
-                c1.contract_id,
-                c1.data
-            FROM
-                contract_comments c1
-            WHERE
-                    c1.contract_id = ANY(contract_ids)
-              AND (c1.data -> 'createdTime')::BIGINT >= past_time_ms
-        ),
-             reply_chain_comments AS (
-                 SELECT
-                     (c2.data ->> 'id') AS id,
-                     c2.contract_id,
-                     c2.data
-                 FROM
-                     contract_comments c2
-                         JOIN matching_comments mc
-                              ON c2.contract_id = mc.contract_id
-                                  AND c2.data ->> 'replyToCommentId' = mc.data ->> 'replyToCommentId'
-                                  AND c2.data->>'id' != mc.id
-             ),
-             parent_comments AS (
-                 SELECT
-                     (c3.data ->> 'id') AS id,
-                     c3.contract_id,
-                     c3.data
-                 FROM
-                     contract_comments c3
-                         JOIN matching_comments mc
-                              ON c3.contract_id = mc.contract_id
-                                  AND c3.data ->> 'id' = mc.data ->> 'replyToCommentId'
-             )
-        SELECT * FROM matching_comments
-        UNION ALL
-        SELECT * FROM parent_comments
-        UNION ALL
-        SELECT * FROM reply_chain_comments;
-END;
-$$ LANGUAGE plpgsql;
+$$ language plpgsql;

@@ -8,6 +8,7 @@ import { isContractBlocked } from 'web/lib/firebase/users'
 import { useEvent } from './use-event'
 import { db } from 'web/lib/supabase/db'
 import { usePersistentInMemoryState } from './use-persistent-in-memory-state'
+import { getBoosts } from 'web/lib/supabase/ads'
 
 const PAGE_SIZE = 20
 
@@ -20,6 +21,11 @@ export const useFeed = (
   }
 ) => {
   const { topic } = options ?? {}
+
+  useEffect(() => {
+    if (user) getBoosts(user.id)
+  }, [])
+
   const [savedContracts, setSavedContracts] = usePersistentInMemoryState<
     Contract[] | undefined
   >(undefined, `recommended-contracts-${user?.id}-${key}`)
